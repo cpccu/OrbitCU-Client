@@ -11,7 +11,7 @@ export interface AuthContextType {
   loading: boolean;
   login: (email: string, password?: string) => Promise<void>;
   logout: () => void;
-  register: (userData: Partial<User>) => Promise<void>;
+  register: (userData: Partial<User> & { password?: string }) => Promise<void>;
   updateUserRole: (userId: string, newRole: UserRole, assignedClub?: string) => void;
   allUsers: User[]; // In-memory & synced list for Admin Console demo
   isAuthenticated: boolean;
@@ -70,8 +70,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     try {
       const storedUser = localStorage.getItem('cu_auth_user') || localStorage.getItem('user');
+      let parsedUser: User | null = null;
       if (storedUser) {
-        setUser(JSON.parse(storedUser));
+        parsedUser = JSON.parse(storedUser);
+        setUser(parsedUser);
       }
 
       const storedToken = localStorage.getItem('cu_auth_token') || localStorage.getItem('token');
@@ -87,6 +89,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       } else {
         localStorage.setItem('cu_all_users', JSON.stringify(INITIAL_DEMO_USERS));
+      }
+
+      // If stored token is a mock token (e.g. starts with jwt-session-token-) or invalid,
+      // silently upgrade to a real JWT from backend
+      if (parsedUser && (!storedToken || storedToken.startsWith('jwt-session-token-') || !storedToken.startsWith('ey'))) {
+        const cleanEmail = parsedUser.email.toLowerCase().trim();
+        const pwd = cleanEmail === 'admin@city.edu' ? 'admin123' : 'password123';
+        api.post('/auth/login', { email: cleanEmail, password: pwd })
+          .then((res) => {
+            const realToken = res.data?.data?.token || res.data?.token;
+            if (realToken) {
+              setToken(realToken);
+              localStorage.setItem('cu_auth_token', realToken);
+              localStorage.setItem('token', realToken);
+            }
+          })
+          .catch(() => {});
       }
     } catch {
       // Storage unavailable fallback
@@ -108,12 +127,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         clubMemberships: ['CU Computer Club (CUCC)'],
       };
 
+      const defaultPassword = cleanEmail === 'admin@city.edu' ? 'admin123' : 'password123';
+      const passwordToSend = _password && _password !== 'demo12345' ? _password : defaultPassword;
+
       let sessionToken = 'jwt-session-token-' + Date.now();
       try {
         // Try real backend authentication
         const res = await api.post('/auth/login', {
           email: cleanEmail,
-          password: _password || (cleanEmail === 'admin@city.edu' ? 'admin123' : 'password123'),
+          password: passwordToSend,
         });
         const backendToken = res.data?.data?.token || res.data?.token;
         const backendUser = res.data?.data?.user || res.data?.user;
@@ -125,7 +147,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (backendUser.role) found.role = backendUser.role;
         }
       } catch {
-        // Server offline or user in demo/mock mode; fallback cleanly to local demo session
+        // If login failed because user not found in remote DB, try registering them!
+        try {
+          const regRes = await api.post('/auth/register', {
+            name: found.name,
+            universityId: found.universityId,
+            email: found.email,
+            password: passwordToSend,
+            department: found.department,
+            role: found.role,
+          });
+          const backendToken = regRes.data?.data?.token || regRes.data?.token;
+          if (backendToken) {
+            sessionToken = backendToken;
+          }
+        } catch {
+          // Server offline or user in demo/mock mode; fallback cleanly to local demo session
+        }
       }
 
       setUser(found);
@@ -144,24 +182,59 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const register = async (userData: Partial<User>) => {
+  const register = async (userData: Partial<User> & { password?: string }) => {
     setLoading(true);
     try {
+      const cleanEmail = (userData.email || 'new@city.edu').toLowerCase().trim();
+      const pwd = userData.password || 'password123';
       const newUser: User = {
         _id: `usr_${Date.now()}`,
         name: userData.name || 'New Student',
         universityId: userData.universityId || '2024-1-60-000',
-        email: userData.email || 'new@city.edu',
+        email: cleanEmail,
         department: userData.department || 'CSE',
         role: userData.role || 'STUDENT',
         clubMemberships: userData.clubMemberships || [],
         adminOfClub: userData.adminOfClub || null,
       };
 
+      let sessionToken = 'jwt-session-token-' + Date.now();
+      try {
+        const regRes = await api.post('/auth/register', {
+          name: newUser.name,
+          universityId: newUser.universityId,
+          email: newUser.email,
+          password: pwd,
+          department: newUser.department,
+          role: newUser.role,
+        });
+        const backendToken = regRes.data?.data?.token || regRes.data?.token;
+        const backendUser = regRes.data?.data?.user || regRes.data?.user;
+        if (backendToken) {
+          sessionToken = backendToken;
+        }
+        if (backendUser?._id) {
+          newUser._id = backendUser._id;
+        }
+      } catch {
+        // If user already registered, try logging in
+        try {
+          const logRes = await api.post('/auth/login', {
+            email: newUser.email,
+            password: pwd,
+          });
+          const backendToken = logRes.data?.data?.token || logRes.data?.token;
+          if (backendToken) {
+            sessionToken = backendToken;
+          }
+        } catch {
+          // Fallback cleanly
+        }
+      }
+
       const updatedUsers = [...allUsers, newUser];
       setAllUsers(updatedUsers);
       setUser(newUser);
-      const sessionToken = 'jwt-session-token-' + Date.now();
       setToken(sessionToken);
 
       try {

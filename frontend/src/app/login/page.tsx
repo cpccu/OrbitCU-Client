@@ -38,11 +38,12 @@ function LoginForm() {
   };
 
   const handleDemoFill = async (demoEmail: string, roleName: string) => {
+    const demoPassword = demoEmail === 'admin@city.edu' ? 'admin123' : 'password123';
     setEmail(demoEmail);
-    setPassword('demo12345');
+    setPassword(demoPassword);
     setIsSubmitting(true);
     try {
-      await login(demoEmail, 'demo12345');
+      await login(demoEmail, demoPassword);
       toast.success(`Logged in as ${roleName} (${demoEmail})`);
       router.push(redirectTarget);
     } catch {

@@ -55,6 +55,7 @@ export default function RegisterPage() {
         email: email.trim(),
         department,
         clubMemberships: isNoneSelected ? [] : selectedClubs,
+        password: password.trim() || 'password123',
       });
       toast.success('Registration complete! Welcome to CampusOS.');
       router.push('/dashboard');
