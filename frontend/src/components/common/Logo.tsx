@@ -20,9 +20,9 @@ export const Logo: React.FC<LogoProps> = ({
 }) => {
   // Dimensions mapping
   const sizeMap = {
-    sm: { icon: 32, textTitle: 'text-lg', textSub: 'text-[8px]', height: 32 },
-    md: { icon: 42, textTitle: 'text-2xl', textSub: 'text-[10px]', height: 42 },
-    lg: { icon: 56, textTitle: 'text-3xl', textSub: 'text-xs', height: 56 },
+    sm: { icon: 32, textTitle: 'text-lg', textSub: 'text-[8px]', height: 32, gap: 'gap-1' },
+    md: { icon: 42, textTitle: 'text-2xl', textSub: 'text-[10px]', height: 42, gap: 'gap-1.5' },
+    lg: { icon: 56, textTitle: 'text-3xl', textSub: 'text-xs', height: 56, gap: 'gap-2' },
   };
 
   const currentSize = sizeMap[size];
@@ -58,13 +58,13 @@ export const Logo: React.FC<LogoProps> = ({
   );
 
   const LogoContent = (
-    <div className={`inline-flex items-center gap-3 select-none ${className}`}>
+    <div className={`inline-flex items-center ${currentSize.gap} select-none ${className}`}>
       {IconGraphic}
 
       {variant === 'full' && (
         <div className="flex flex-col justify-center leading-none">
           <div className={`font-black tracking-tight ${textColor} ${currentSize.textTitle}`}>
-            CU<span className="text-[#DC2626]">Sync</span>
+            Campus<span className="text-[#DC2626]">OS</span>
           </div>
           <span
             className={`font-bold tracking-widest text-zinc-500 dark:text-zinc-400 uppercase mt-1 ${currentSize.textSub}`}
